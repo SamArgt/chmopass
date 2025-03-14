@@ -1,77 +1,18 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder, post};
 use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
 use serde::{Deserialize, Serialize};
-use std::{fs, env};
+use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
-use config::{Config, ConfigError, Environment, File, Map};
 use env_logger::Env;
 use log::{debug, warn};
-use chmopass::Claims;
+use chmopass::middleware::Claims;
+use chmopass::app_config::AppConfig;
 
 
-#[derive(Debug, Deserialize)]
-pub struct AppConfig {
-    pub server_port: u16,
-    pub expiration_seconds: usize,
-    pub private_pem_filename: String,
-    pub debug: bool,
-    pub run_mode: String,
-    pub services_credentials:  Map<String, String>,
-    pub authorized_github_ids: Vec<i64>,
-}
-
-impl AppConfig {
-    pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
-        let mut secrets_file = "config/default_services_credentials.json";
-        if run_mode == " production" {
-            secrets_file = "config/services_credentials.json";
-        }
-        let s = Config::builder()
-            // Start off by merging in the "default" configuration file
-            .add_source(File::with_name("config/default"))
-            .add_source(File::with_name("config/local.toml").required(false))
-            .add_source(File::with_name(secrets_file).required(true))
-            // Add in settings from the environment (with a prefix of APP)
-            // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-            .add_source(Environment::with_prefix("CHMOSEC_APP"))
-            .set_override("run_mode", run_mode)?
-            .build()?;
-
-        // Now that we're done, let's access our configuration
-        println!("debug: {:?}", s.get_bool("debug"));
-
-        // You can deserialize (and thus freeze) the entire configuration as
-        s.try_deserialize()
-    }
-}
-
-
-// Request models
-#[derive(Debug, Deserialize)]
-struct ServiceTokenRequest {
-    client_id: String,
-    client_secret: String,
-    #[serde(default)]
-    scope: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct UserTokenRequest {
-    github_token: String,
-}
-
-// Response models
 #[derive(Debug, Serialize)]
 struct TokenResponse {
     token: String,
     expires_in: usize,
-}
-
-// Github API response
-#[derive(Debug, Deserialize)]
-struct GithubUser {
-    id: i64,
 }
 
 // Generate JWT token with the given subject and optional fields
@@ -113,6 +54,14 @@ fn generate_token(
     })
 }
 
+#[derive(Debug, Deserialize)]
+struct ServiceTokenRequest {
+    client_id: String,
+    client_secret: String,
+    #[serde(default)]
+    scope: Option<String>,
+}
+
 // Handler for service-to-service token generation
 #[post("/service-token")]
 async fn generate_service_token(
@@ -120,27 +69,36 @@ async fn generate_service_token(
     config: web::Data<AppConfig>
 ) -> impl Responder {
     // Validate service credentials
-    let client_secret = config.services_credentials.get(&service_request.client_id);
-    match client_secret {
-        Some(client_secret) => {
-            if client_secret != &service_request.client_secret {
-                return HttpResponse::Unauthorized().body("Invalid client credentials");
-            }
-            // Generate token for the authenticated service
-            match generate_token(
-                service_request.client_id.clone(),
-                None,
-                service_request.scope.clone(),
-                Some(config.expiration_seconds),
-                &config.private_pem_filename,
-            ) {
-                Ok(token_response) => HttpResponse::Ok().json(token_response),
-                Err(_) => HttpResponse::InternalServerError().body("Failed to generate token"),
-            }
-        },
-        None => HttpResponse::Unauthorized().body("Invalid client credentials"),
+    let validated: bool = config.authorized_services.iter().any(|cred| {
+        cred.client_id == service_request.client_id && cred.client_secret == service_request.client_secret
+    });
+    if !validated {
+        return HttpResponse::Unauthorized().body("Invalid client credentials");
+    }
+    // Generate token for the authenticated service
+    match generate_token(
+        service_request.client_id.clone(),
+        None,
+        service_request.scope.clone(),
+        Some(config.expiration_seconds),
+        &config.private_pem_filename,
+    ) {
+        Ok(token_response) => HttpResponse::Ok().json(token_response),
+        Err(_) => HttpResponse::InternalServerError().body("Failed to generate token"),
     }
 }
+
+#[derive(Debug, Deserialize)]
+struct UserTokenRequest {
+    github_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubUser {
+    id: i64,
+}
+
+
 
 // Handler for user token generation via GitHub authentication
 #[post("/user-token")]
@@ -208,6 +166,12 @@ async fn main() -> std::io::Result<()> {
     debug!("Config: {:?}", app_config);
     // Check private key file
     fs::metadata(&app_config.private_pem_filename).expect("Private key file not found");
+    // Check service credentials are not default in production
+    if app_config.run_mode == "production" {
+        if app_config.service.client_id == "chmopass" || app_config.service.client_id == "chmopass" {
+                panic!("Service credentials are default in production");
+        }
+    }
     // Start HTTP server
     let app_state = web::Data::new(app_config);
     let server_port = app_state.clone().server_port;
