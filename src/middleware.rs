@@ -24,7 +24,7 @@ pub struct Claims {
 }
 
 
-fn validate_token<'a>(token: &'a str, public_pem_filename: &'a str) -> Result<Claims, jsonwebtoken::errors::Error> {
+pub fn validate_token<'a>(token: &'a str, public_pem_filename: &'a str) -> Result<Claims, jsonwebtoken::errors::Error> {
     let public_key = fs::read(public_pem_filename).expect("Could not read public key file");
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_required_spec_claims(&["exp", "iat", "sub"]);
