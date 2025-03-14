@@ -17,6 +17,7 @@ pub struct AppConfig {
     pub debug: bool,
     pub run_mode: String,
     pub services_credentials:  Map<String, String>,
+    pub authorized_github_ids: Vec<i64>,
 }
 
 impl AppConfig {
@@ -71,8 +72,6 @@ struct TokenResponse {
 #[derive(Debug, Deserialize)]
 struct GithubUser {
     id: i64,
-    login: String,
-    name: Option<String>,
 }
 
 // Generate JWT token with the given subject and optional fields
@@ -163,10 +162,14 @@ async fn generate_user_token(
                 // Parse GitHub user data
                 match response.json::<GithubUser>().await {
                     Ok(github_user) => {
+                        // Check if the user is authorized
+                        if !config.authorized_github_ids.contains(&github_user.id) {
+                            return HttpResponse::Unauthorized().body("Unauthorized user");
+                        }
                         // Generate token for the authenticated user
                         match generate_token(
                             format!("github:{}", github_user.id),
-                            github_user.name,
+                            None,
                             Some("user".to_string()),
                             Some(config.expiration_seconds),
                             &config.private_pem_filename,
