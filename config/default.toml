@@ -1,0 +1,3 @@
+server_port = 8080
+token_expiration = 3600
+private_pem_filename = "private.pem"
