@@ -5,7 +5,9 @@ expiration_seconds = 3600
 private_pem_filename = "private.pem"
 authorized_github_ids =[36817478]
 
-[service]
+[credentials]
 client_id = "chmopass"
 client_secret = "chmopass"
-public_pem_filename = "public.pem"
+
+[auth]
+pem_file = "public.pem"

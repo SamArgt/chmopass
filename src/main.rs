@@ -168,7 +168,7 @@ async fn main() -> std::io::Result<()> {
     fs::metadata(&app_config.private_pem_filename).expect("Private key file not found");
     // Check service credentials are not default in production
     if app_config.run_mode == "production" {
-        if app_config.service.client_id == "chmopass" || app_config.service.client_id == "chmopass" {
+        if app_config.credentials.client_id == "chmopass" || app_config.credentials.client_id == "chmopass" {
                 panic!("Service credentials are default in production");
         }
     }

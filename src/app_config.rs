@@ -4,6 +4,11 @@ use std::env;
 use crate::creds::ServiceCredentials;
 
 
+#[derive(Debug, Deserialize)]
+pub struct Auth {
+    pub pem_file: String
+}
+
 
 #[derive(Debug, Deserialize)]
 pub struct AppConfig {
@@ -14,8 +19,8 @@ pub struct AppConfig {
     pub run_mode: String,
     pub authorized_services:  Vec<ServiceCredentials>,
     pub authorized_github_ids: Vec<i64>,
-    pub public_pem_filename: String,
-    pub service: ServiceCredentials,
+    pub credentials: ServiceCredentials,
+    pub auth: Auth
 }
 
 impl AppConfig {
