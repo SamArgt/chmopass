@@ -1,4 +1,4 @@
 debug=true
 server_port = 8080
-expiration_seconds = 3600
+expiration_seconds = 60
 private_pem_filename = "private.pem"

@@ -3,6 +3,7 @@ use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error,
 };
+use chrono::TimeZone;
 use log::debug;
 use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
@@ -32,7 +33,16 @@ fn validate_token<'a>(token: &'a str, public_pem_filename: &'a str) -> Result<Cl
         &DecodingKey::from_rsa_pem(&public_key)?,
         &validation
     )?;
-    debug!("Token data: {:?}", token_data);
+    debug!("Token Claims: {:?}", token_data.claims);
+    // Check token is not expired
+    let now = chrono::Utc::now();
+    let token_expire = chrono::Utc.timestamp_opt(token_data.claims.exp as i64, 0);
+    debug!("Token expires at: {:?}", token_expire);
+    if let Some(token_expire) = token_expire.single() {
+        if token_expire < now {
+            return Err(jsonwebtoken::errors::ErrorKind::ExpiredSignature.into());
+        }
+    }
     Ok(token_data.claims)
 }
 
