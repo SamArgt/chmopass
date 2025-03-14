@@ -3,6 +3,7 @@ use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error,
 };
+use log::debug;
 use futures_util::future::LocalBoxFuture;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Serialize, Deserialize};
@@ -31,6 +32,7 @@ fn validate_token<'a>(token: &'a str, public_pem_filename: &'a str) -> Result<Cl
         &DecodingKey::from_rsa_pem(&public_key)?,
         &validation
     )?;
+    debug!("Token data: {:?}", token_data);
     Ok(token_data.claims)
 }
 
