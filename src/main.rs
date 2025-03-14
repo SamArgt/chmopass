@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::{fs, env};
 use std::time::{SystemTime, UNIX_EPOCH};
 use config::{Config, ConfigError, Environment, File};
+use env_logger::Env;
+use log::{debug, warn};
 use chmopass::Claims;
 
 
@@ -12,6 +14,8 @@ pub struct AppConfig {
     pub server_port: u16,
     pub expiration_seconds: usize,
     pub private_pem_filename: String,
+    pub debug: bool,
+    pub run_mode: String,
 }
 
 impl AppConfig {
@@ -70,7 +74,6 @@ struct GithubUser {
 struct ServiceCredentials {
     client_id: String,
     client_secret: String,
-    name: String,
 }
 
 // Initialize a simple in-memory store for demonstration
@@ -79,12 +82,10 @@ fn get_service_credentials() -> Vec<ServiceCredentials> {
         ServiceCredentials {
             client_id: "service1".to_string(),
             client_secret: "secret1".to_string(),
-            name: "backend-service-1".to_string(),
         },
         ServiceCredentials {
             client_id: "service2".to_string(),
             client_secret: "secret2".to_string(),
-            name: "backend-service-2".to_string(),
         },
     ]
 }
@@ -145,7 +146,7 @@ async fn generate_service_token(
         Some(service) => {
             // Generate token for the authenticated service
             match generate_token(
-                service.name.clone(),
+                service.client_id.clone(),
                 None,
                 service_request.scope.clone(),
                 Some(config.expiration_seconds),
@@ -207,10 +208,23 @@ async fn main() -> std::io::Result<()> {
     // Load environment variables
     dotenv::dotenv().ok();
     // Load config
-    let config = AppConfig::new().expect("Failed to load configuration");
-    let app_state = web::Data::new(config);
-    let server_port = app_state.clone().server_port;
+    let app_config = AppConfig::new().expect("Failed to load configuration");
+    // Logger
+    let mut log_level = "chmopass=info";
+    if app_config.debug {
+        log_level = "chmopass=debug,info";
+    }
+    let env = Env::default()
+        .default_filter_or(log_level)
+        .default_write_style_or("auto");
+    env_logger::init_from_env(env);
+    warn!("Starting chmosec-service in {} mode", app_config.run_mode);
+    debug!("Config: {:?}", app_config);
+    // Check private key file
+    fs::metadata(&app_config.private_pem_filename).expect("Private key file not found");
     // Start HTTP server
+    let app_state = web::Data::new(app_config);
+    let server_port = app_state.clone().server_port;
     HttpServer::new(move || {
         App::new()
             .app_data(app_state.clone())
