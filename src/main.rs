@@ -3,7 +3,7 @@ use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
 use serde::{Deserialize, Serialize};
 use std::{fs, env};
 use std::time::{SystemTime, UNIX_EPOCH};
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, Environment, File, Map};
 use env_logger::Env;
 use log::{debug, warn};
 use chmopass::Claims;
@@ -16,16 +16,21 @@ pub struct AppConfig {
     pub private_pem_filename: String,
     pub debug: bool,
     pub run_mode: String,
+    pub services_credentials:  Map<String, String>,
 }
 
 impl AppConfig {
     pub fn new() -> Result<Self, ConfigError> {
         let run_mode = env::var("RUN_MODE").unwrap_or_else(|_| "development".into());
-
+        let mut secrets_file = "config/default_services_credentials.json";
+        if run_mode == " production" {
+            secrets_file = "config/services_credentials.json";
+        }
         let s = Config::builder()
             // Start off by merging in the "default" configuration file
             .add_source(File::with_name("config/default"))
             .add_source(File::with_name("config/local.toml").required(false))
+            .add_source(File::with_name(secrets_file).required(true))
             // Add in settings from the environment (with a prefix of APP)
             // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
             .add_source(Environment::with_prefix("CHMOSEC_APP"))
@@ -68,26 +73,6 @@ struct GithubUser {
     id: i64,
     login: String,
     name: Option<String>,
-}
-
-// Service credentials store (in a real app, this would be in a database)
-struct ServiceCredentials {
-    client_id: String,
-    client_secret: String,
-}
-
-// Initialize a simple in-memory store for demonstration
-fn get_service_credentials() -> Vec<ServiceCredentials> {
-    vec![
-        ServiceCredentials {
-            client_id: "service1".to_string(),
-            client_secret: "secret1".to_string(),
-        },
-        ServiceCredentials {
-            client_id: "service2".to_string(),
-            client_secret: "secret2".to_string(),
-        },
-    ]
 }
 
 // Generate JWT token with the given subject and optional fields
@@ -136,17 +121,15 @@ async fn generate_service_token(
     config: web::Data<AppConfig>
 ) -> impl Responder {
     // Validate service credentials
-    let service_credentials = get_service_credentials();
-    let service = service_credentials.iter().find(|cred| 
-        cred.client_id == service_request.client_id && 
-        cred.client_secret == service_request.client_secret
-    );
-    
-    match service {
-        Some(service) => {
+    let client_secret = config.services_credentials.get(&service_request.client_id);
+    match client_secret {
+        Some(client_secret) => {
+            if client_secret != &service_request.client_secret {
+                return HttpResponse::Unauthorized().body("Invalid client credentials");
+            }
             // Generate token for the authenticated service
             match generate_token(
-                service.client_id.clone(),
+                service_request.client_id.clone(),
                 None,
                 service_request.scope.clone(),
                 Some(config.expiration_seconds),
