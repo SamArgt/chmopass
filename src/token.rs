@@ -121,7 +121,7 @@ pub async fn refresh_token_loop<T: ServiceTokenStorage>(token_storage: web::Data
         info!("Start token refresh loop");
         let service_credentials = token_storage.get_service_credentials();
         let client = reqwest::Client::new();
-        let mut sleep_time = tokio::time::Duration::from_secs(30000);
+        let mut sleep_time = tokio::time::Duration::from_secs(3);
         let response = client
             .post(generate_service_token_url)
             .json(&ServiceTokenRequest {
