@@ -3,7 +3,7 @@ use chmopass::app_state::AppState;
 use serde::Deserialize;
 use std::fs;
 use env_logger::Env;
-use log::{debug, warn};
+use log::{debug, warn, info};
 use chmopass::middleware::ChmoPassMiddleWare;
 use chmopass::app_config::AppConfig;
 use chmopass::token::{refresh_token_loop, ServiceTokenRequest, generate_token};
@@ -31,7 +31,10 @@ async fn generate_service_token(
         Some(app_state.config.expiration_seconds),
         &app_state.config.private_pem_filename,
     ) {
-        Ok(token_response) => HttpResponse::Ok().json(token_response),
+        Ok(token_response) => {
+            info!("Generated token for service: {}", service_request.client_id);
+            HttpResponse::Ok().json(token_response)
+        },
         Err(_) => HttpResponse::InternalServerError().body("Failed to generate token"),
     }
 }
@@ -81,6 +84,7 @@ async fn generate_user_token(
                             &app_state.config.private_pem_filename,
                         ) {
                             Ok(token_response) => {
+                                info!("Generated token for user: {}", github_user.id);
                                 // Set-Cookie header with expiration time
                                 let cookie = format!(
                                     "CHMO_TOKEN={}; Max-Age={}; Secure; HttpOnly; SameSite=Strict",
@@ -160,7 +164,7 @@ async fn main() -> std::io::Result<()> {
                     .service(status)
             )
     })
-    .bind(format!("127.0.0.1:{}", server_port))?
+    .bind(format!("0.0.0.0:{}", server_port))?
     .run()
     .await
 }
