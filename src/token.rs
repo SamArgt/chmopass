@@ -119,16 +119,18 @@ pub fn validate_token<'a>(token: &'a str, public_pem_filename: &'a str) -> Resul
 pub async fn refresh_token_loop<T: ServiceTokenStorage>(token_storage: web::Data<T>, generate_service_token_url: &str, pem_file: &str) -> Result<(), Box<dyn std::error::Error>> {
     info!("Start token refresh loop");
     loop {
+        let mut sleep_time = tokio::time::Duration::from_secs(3);
         let service_credentials = token_storage.get_service_credentials();
         let client = reqwest::Client::new();
-        let mut sleep_time = tokio::time::Duration::from_secs(3);
+        let request = ServiceTokenRequest {
+            client_id: service_credentials.client_id.clone(),
+            client_secret: service_credentials.client_secret.clone(),
+            scope: None,
+        };
+        debug!("Requesting token with: {:?} to url: {}", request, generate_service_token_url);
         let response = client
             .post(generate_service_token_url)
-            .json(&ServiceTokenRequest {
-                client_id: service_credentials.client_id,
-                client_secret: service_credentials.client_secret,
-                scope: None,
-            })
+            .json(&request)
             .send()
             .await;
         if response.is_err() {
