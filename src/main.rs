@@ -1,11 +1,11 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder, post};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder, post, get};
 use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 use env_logger::Env;
 use log::{debug, warn};
-use chmopass::middleware::Claims;
+use chmopass::middleware::{Claims, ChmoPassMiddleWare};
 use chmopass::app_config::AppConfig;
 
 
@@ -132,7 +132,15 @@ async fn generate_user_token(
                             Some(config.expiration_seconds),
                             &config.private_pem_filename,
                         ) {
-                            Ok(token_response) => HttpResponse::Ok().json(token_response),
+                            Ok(token_response) => {
+                                // Set-Cookie header with expiration time
+                                let cookie = format!(
+                                    "CHMO_TOKEN={}; Max-Age={}; Secure; HttpOnly; SameSite=Strict",
+                                    token_response.token,
+                                    token_response.expires_in,
+                                );
+                                HttpResponse::Ok().append_header(("Set-Cookie", cookie)).json(true)
+                        },
                             Err(_) => HttpResponse::InternalServerError().body("Failed to generate token"),
                         }
                     },
@@ -144,6 +152,11 @@ async fn generate_user_token(
         },
         Err(_) => HttpResponse::InternalServerError().body("Failed to verify GitHub token"),
     }
+}
+
+#[get("/status")]
+async fn status() -> impl Responder {
+    HttpResponse::Ok().body("Chmopass service is running!")
 }
 
 // Main function to start the server
@@ -176,10 +189,17 @@ async fn main() -> std::io::Result<()> {
     let app_state = web::Data::new(app_config);
     let server_port = app_state.clone().server_port;
     HttpServer::new(move || {
+        let pem_file = app_state.auth.pem_file.clone();
+        let _auth = ChmoPassMiddleWare::new(pem_file);
         App::new()
             .app_data(app_state.clone())
             .service(generate_service_token)
             .service(generate_user_token)
+            .service(
+                web::scope("/secured")
+                    .wrap(_auth)
+                    .service(status)
+            )
     })
     .bind(format!("127.0.0.1:{}", server_port))?
     .run()
