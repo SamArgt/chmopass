@@ -160,7 +160,7 @@ pub async fn refresh_token_loop<T: ServiceTokenStorage>(token_storage: web::Data
                     
                 }
             } else {
-                warn!("Failed call chmopass generation service with response: {:?}", response);
+                warn!("Failed call chmopass generation service with response: {:?}", response.text().await);
             }
         }
         tokio::time::sleep(sleep_time).await;
