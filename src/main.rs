@@ -1,75 +1,23 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder, post, get};
-use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
-use serde::{Deserialize, Serialize};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder, post, get, rt};
+use chmopass::app_state::AppState;
+use serde::Deserialize;
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 use env_logger::Env;
 use log::{debug, warn};
-use chmopass::middleware::{Claims, ChmoPassMiddleWare};
+use chmopass::middleware::ChmoPassMiddleWare;
 use chmopass::app_config::AppConfig;
+use chmopass::token::{refresh_token_loop, ServiceTokenRequest, generate_token};
 
 
-#[derive(Debug, Serialize)]
-struct TokenResponse {
-    token: String,
-    expires_in: usize,
-}
-
-// Generate JWT token with the given subject and optional fields
-fn generate_token(
-    subject: String,
-    name: Option<String>,
-    scope: Option<String>,
-    expiration_sec: Option<usize>,
-    private_pem_filename: &str,
-) -> Result<TokenResponse, jsonwebtoken::errors::Error> {
-    // Set token expiration to 1 hour from now
-    let expiration_seconds = expiration_sec.unwrap_or(3600);
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs() as usize;
-    
-    let claims = Claims {
-        sub: subject,
-        exp: now + expiration_seconds,
-        iat: now,
-        iss: "pass-service".to_string(),
-        scope,
-        name,
-    };
-    
-    // Load the private key (in production, consider using environment variables or secure storage)
-    let private_key = fs::read(private_pem_filename).expect("Could not read private key file");
-    
-    // Create a header specifying RS256 algorithm
-    let header = Header::new(Algorithm::RS256);
-    
-    // Encode the token
-    let token = encode(&header, &claims, &EncodingKey::from_rsa_pem(&private_key)?)?;
-    
-    Ok(TokenResponse {
-        token,
-        expires_in: expiration_seconds,
-    })
-}
-
-#[derive(Debug, Deserialize)]
-struct ServiceTokenRequest {
-    client_id: String,
-    client_secret: String,
-    #[serde(default)]
-    scope: Option<String>,
-}
 
 // Handler for service-to-service token generation
 #[post("/service-token")]
 async fn generate_service_token(
     service_request: web::Json<ServiceTokenRequest>,
-    config: web::Data<AppConfig>
+    app_state: web::Data<AppState>
 ) -> impl Responder {
     // Validate service credentials
-    let validated: bool = config.authorized_services.iter().any(|cred| {
+    let validated: bool = app_state.config.authorized_services.iter().any(|cred| {
         cred.client_id == service_request.client_id && cred.client_secret == service_request.client_secret
     });
     if !validated {
@@ -80,8 +28,8 @@ async fn generate_service_token(
         service_request.client_id.clone(),
         None,
         service_request.scope.clone(),
-        Some(config.expiration_seconds),
-        &config.private_pem_filename,
+        Some(app_state.config.expiration_seconds),
+        &app_state.config.private_pem_filename,
     ) {
         Ok(token_response) => HttpResponse::Ok().json(token_response),
         Err(_) => HttpResponse::InternalServerError().body("Failed to generate token"),
@@ -104,7 +52,7 @@ struct GithubUser {
 #[post("/user-token")]
 async fn generate_user_token(
     user_request: web::Json<UserTokenRequest>,
-    config: web::Data<AppConfig>,
+    app_state: web::Data<AppState>,
 ) -> impl Responder {
     // Verify GitHub token by making a request to GitHub API
     let github_response = reqwest::Client::new()
@@ -121,7 +69,7 @@ async fn generate_user_token(
                 match response.json::<GithubUser>().await {
                     Ok(github_user) => {
                         // Check if the user is authorized
-                        if !config.authorized_github_ids.contains(&github_user.id) {
+                        if !app_state.config.authorized_github_ids.contains(&github_user.id) {
                             return HttpResponse::Unauthorized().body("Unauthorized user");
                         }
                         // Generate token for the authenticated user
@@ -129,8 +77,8 @@ async fn generate_user_token(
                             format!("github:{}", github_user.id),
                             None,
                             Some("user".to_string()),
-                            Some(config.expiration_seconds),
-                            &config.private_pem_filename,
+                            Some(app_state.config.expiration_seconds),
+                            &app_state.config.private_pem_filename,
                         ) {
                             Ok(token_response) => {
                                 // Set-Cookie header with expiration time
@@ -185,11 +133,22 @@ async fn main() -> std::io::Result<()> {
                 panic!("Service credentials are default in production");
         }
     }
+    // app state
+    let app_state = web::Data::new(AppState {
+        config: app_config.clone(),
+        token: std::sync::Mutex::new(None),
+    });
+    // Start token refresh loop
+    let app_state_clone = app_state.clone();
+    let generate_service_token_url = format!("http://127.0.0.1:{}/service-token", app_state.config.server_port);
+    let pem_file = app_state_clone.config.auth.pem_file.clone();
+    rt::spawn(async move {
+        let _ = refresh_token_loop(app_state_clone, &generate_service_token_url, &pem_file).await;
+    });
     // Start HTTP server
-    let app_state = web::Data::new(app_config);
-    let server_port = app_state.clone().server_port;
+    let server_port = app_state.clone().config.server_port;
     HttpServer::new(move || {
-        let pem_file = app_state.auth.pem_file.clone();
+        let pem_file = app_state.config.auth.pem_file.clone();
         let _auth = ChmoPassMiddleWare::new(pem_file);
         App::new()
             .app_data(app_state.clone())

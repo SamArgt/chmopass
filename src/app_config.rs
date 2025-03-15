@@ -4,13 +4,13 @@ use std::env;
 use crate::creds::ServiceCredentials;
 
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Auth {
     pub pem_file: String
 }
 
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
     pub server_port: u16,
     pub expiration_seconds: usize,
@@ -48,3 +48,5 @@ impl AppConfig {
         s.try_deserialize()
     }
 }
+
+

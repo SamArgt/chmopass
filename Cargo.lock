@@ -436,6 +436,7 @@ dependencies = [
  "log",
  "reqwest",
  "serde",
+ "tokio",
 ]
 
 [[package]]

@@ -1,50 +1,10 @@
-use std::{future::{ready, Ready}, rc::Rc, fs};
+use std::{future::{ready, Ready}, rc::Rc};
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error,
 };
-use chrono::TimeZone;
-use log::debug;
 use futures_util::future::LocalBoxFuture;
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use serde::{Serialize, Deserialize};
-
-
-// JWT Claims structure
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Claims {
-    pub sub: String,         // Subject (user ID or service ID)
-    pub exp: usize,          // Expiration time
-    pub iat: usize,          // Issued at
-    pub iss: String,         // Issuer (your pass service)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scope: Option<String>, // Optional scopes
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,  // Optional user name (for user tokens)
-}
-
-
-pub fn validate_token<'a>(token: &'a str, public_pem_filename: &'a str) -> Result<Claims, jsonwebtoken::errors::Error> {
-    let public_key = fs::read(public_pem_filename).expect("Could not read public key file");
-    let mut validation = Validation::new(Algorithm::RS256);
-    validation.set_required_spec_claims(&["exp", "iat", "sub"]);
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_rsa_pem(&public_key)?,
-        &validation
-    )?;
-    debug!("Token Claims: {:?}", token_data.claims);
-    // Check token is not expired
-    let now = chrono::Utc::now();
-    let token_expire = chrono::Utc.timestamp_opt(token_data.claims.exp as i64, 0);
-    debug!("Token expires at: {:?}", token_expire);
-    if let Some(token_expire) = token_expire.single() {
-        if token_expire < now {
-            return Err(jsonwebtoken::errors::ErrorKind::ExpiredSignature.into());
-        }
-    }
-    Ok(token_data.claims)
-}
+use crate::token::validate_token;
 
 
 #[derive(Clone)]
