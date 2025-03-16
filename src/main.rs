@@ -18,7 +18,7 @@ async fn generate_service_token(
     app_state: web::Data<AppState>
 ) -> impl Responder {
     // Validate service credentials
-    let validated: bool = app_state.config.authorized_services.iter().any(|cred| {
+    let validated: bool = app_state.config.security.authorized_services.iter().any(|cred| {
         cred.client_id == service_request.client_id && cred.client_secret == service_request.client_secret
     });
     if !validated {
@@ -29,8 +29,8 @@ async fn generate_service_token(
         service_request.client_id.clone(),
         None,
         service_request.scope.clone(),
-        Some(app_state.config.expiration_seconds),
-        &app_state.config.private_pem_filename,
+        Some(app_state.config.security.expiration_seconds),
+        &app_state.config.security.private_pem_filename,
     ) {
         Ok(token_response) => {
             info!("Generated token for service: {}", service_request.client_id);
@@ -73,7 +73,7 @@ async fn generate_user_token(
                 match response.json::<GithubUser>().await {
                     Ok(github_user) => {
                         // Check if the user is authorized
-                        if !app_state.config.authorized_github_ids.contains(&github_user.id) {
+                        if !app_state.config.security.authorized_github_ids.contains(&github_user.id) {
                             return HttpResponse::Unauthorized().body("Unauthorized user");
                         }
                         // Generate token for the authenticated user
@@ -81,8 +81,8 @@ async fn generate_user_token(
                             format!("github:{}", github_user.id),
                             None,
                             Some("user".to_string()),
-                            Some(app_state.config.expiration_seconds),
-                            &app_state.config.private_pem_filename,
+                            Some(app_state.config.security.expiration_seconds),
+                            &app_state.config.security.private_pem_filename,
                         ) {
                             Ok(token_response) => {
                                 info!("Generated token for user: {}", github_user.id);
@@ -121,19 +121,19 @@ async fn main() -> std::io::Result<()> {
     let app_config = AppConfig::new().expect("Failed to load configuration");
     // Logger
     let mut log_level = "chmopass=info";
-    if app_config.debug {
+    if app_config.server.debug_mode {
         log_level = "chmopass=debug,info";
     }
     let env = Env::default()
         .default_filter_or(log_level)
         .default_write_style_or("auto");
     env_logger::init_from_env(env);
-    warn!("Starting chmosec-service in {} mode", app_config.run_mode);
+    warn!("Starting chmosec-service in {} mode", app_config.server.run_mode);
     debug!("Config: {:?}", app_config);
     // Check private key file
-    fs::metadata(&app_config.private_pem_filename).expect("Private key file not found");
+    fs::metadata(&app_config.security.private_pem_filename).expect("Private key file not found");
     // Check service credentials are not default in production
-    if app_config.run_mode == "production" {
+    if app_config.server.run_mode == "production" {
         if app_config.credentials.client_id == "chmopass" {
                 panic!("Service credentials are default in production");
         }
@@ -145,19 +145,19 @@ async fn main() -> std::io::Result<()> {
     });
     // Start token refresh loop
     let app_state_clone = app_state.clone();
-    let generate_service_token_url = format!("http://127.0.0.1:{}/service-token", app_state.config.server_port);
+    let generate_service_token_url = format!("http://127.0.0.1:{}/service-token", app_state.config.server.port);
     let pem_file = app_state_clone.config.auth.pem_file.clone();
     rt::spawn(async move {
         let _ = refresh_token_loop(app_state_clone, &generate_service_token_url, &pem_file).await;
     });
     // Start HTTP server
-    let server_port = app_state.clone().config.server_port;
+    let server_port = app_state.clone().config.server.port;
     HttpServer::new(move || {
         let pem_file = app_state.config.auth.pem_file.clone();
         let _auth = ChmoPassMiddleWare::new(pem_file);
         // In development mode, we allow all origins
         let mut _cors = Cors::default();
-        if app_state.config.run_mode == "development" {
+        if app_state.config.server.run_mode == "development" {
             warn!("Development Mode Cors");
             _cors = _cors
                 .allow_any_origin()

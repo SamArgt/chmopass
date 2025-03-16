@@ -1,5 +1,5 @@
 use config::{Config, ConfigError, Environment, File};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::env;
 use crate::creds::ServiceCredentials;
 
@@ -9,16 +9,25 @@ pub struct Auth {
     pub pem_file: String
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ServerConfig {
+    pub run_mode: String,
+    pub debug_mode: bool,
+    pub port: u16,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SecurityConfig {
+    pub expiration_seconds: usize,
+    pub private_pem_filename: String,
+    pub authorized_github_ids: Vec<i64>,
+    pub authorized_services:  Vec<ServiceCredentials>,
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
-    pub server_port: u16,
-    pub expiration_seconds: usize,
-    pub private_pem_filename: String,
-    pub debug: bool,
-    pub run_mode: String,
-    pub authorized_services:  Vec<ServiceCredentials>,
-    pub authorized_github_ids: Vec<i64>,
+    pub server: ServerConfig,
+    pub security: SecurityConfig,
     pub credentials: ServiceCredentials,
     pub auth: Auth
 }
