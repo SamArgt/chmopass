@@ -181,7 +181,7 @@ async fn main() -> std::io::Result<()> {
                     .service(status)
             )
     })
-    .bind(format!("0.0.0.0:{}", server_port))?
+    .bind(("0.0.0.0", server_port))?
     .run()
     .await
 }
