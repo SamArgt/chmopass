@@ -1,7 +1,7 @@
 use chrono::TimeZone;
 use actix_web::web;
 use reqwest;
-use log::{info, warn, debug, error};
+use log::{info, warn, debug};
 use serde::{Deserialize, Serialize};
 use tokio;
 use std::fs;
