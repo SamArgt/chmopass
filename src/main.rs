@@ -1,4 +1,5 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder, post, get, rt};
+use actix_cors::Cors;
+use actix_web::{get, http, post, rt, web, App, HttpResponse, HttpServer, Responder};
 use chmopass::app_state::AppState;
 use serde::Deserialize;
 use std::fs;
@@ -154,7 +155,23 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         let pem_file = app_state.config.auth.pem_file.clone();
         let _auth = ChmoPassMiddleWare::new(pem_file);
+        // In development mode, we allow all origins
+        let mut _cors = Cors::default();
+        if app_state.config.run_mode == "development" {
+            warn!("Development Mode Cors");
+            _cors = _cors
+                .allow_any_origin()
+                .allowed_origin("http://127.0.0.1:3000")
+                .allowed_origin("http://localhost:3000")
+                .allowed_origin("http://192.168.1.123:3000")
+                .allowed_methods(vec!["GET", "POST"])
+                .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+                .allowed_header(http::header::CONTENT_TYPE)
+                .supports_credentials()
+                .max_age(3600);
+        }
         App::new()
+            .wrap(_cors)
             .app_data(app_state.clone())
             .service(generate_service_token)
             .service(generate_user_token)
