@@ -88,7 +88,7 @@ async fn generate_user_token(
                                 info!("Generated token for user: {}", github_user.id);
                                 // Set-Cookie header with expiration time
                                 let cookie = format!(
-                                    "CHMOPASS_TOKEN={}; Secure; SameSite=Strict;",
+                                    "CHMOPASS_TOKEN={}; Secure; SameSite=Strict; Path=/;",
                                     token_response.token,
                                 );
                                 HttpResponse::Ok().append_header(("Set-Cookie", cookie)).json(true)
