@@ -34,9 +34,9 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = env::var("CHMOPASS_RUN_MODE").expect("CHMOPASS_RUN_MODE must be set");
+        let run_mode: String = env::var("CHMOPASS_RUN_MODE").expect("CHMOPASS_RUN_MODE must be set");
         let mut secrets_file = "config/default_services_credentials.json";
-        if run_mode == " production" {
+        if run_mode == "production" {
             secrets_file = "config/services_credentials.json";
         }
         let s = Config::builder()
