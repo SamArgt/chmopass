@@ -10,7 +10,7 @@ authorized_github_ids =[36817478]
 
 [credentials]
 client_id = "chmopass"
-client_secret = "chmopass"
+client_secret = "chmopass-secret"
 
 [auth]
 pem_file = "public.pem"

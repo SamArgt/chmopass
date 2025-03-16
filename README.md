@@ -50,3 +50,7 @@ Set `CHMOPASS_RUN_MODE = "development"` or `"production"`
 ## Lib
 
 - `chmopass::middleware::ChmopassMiddleWare` middleware to protect chmo services. See [src/main.rs](src/main.rs) for an example.
+
+## Build for Hostinger VPS
+
+`cross build --target 

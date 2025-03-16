@@ -1,4 +1,4 @@
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, File};
 use serde::{Deserialize, Serialize};
 use std::env;
 use crate::creds::ServiceCredentials;
@@ -46,13 +46,8 @@ impl AppConfig {
             .add_source(File::with_name(secrets_file).required(true))
             // Add in settings from the environment (with a prefix of APP)
             // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key
-            .add_source(Environment::with_prefix("CHMOSEC_APP"))
-            .set_override("run_mode", run_mode)?
+            .set_override("server.run_mode", run_mode)?
             .build()?;
-
-        // Now that we're done, let's access our configuration
-        println!("debug: {:?}", s.get_bool("debug"));
-
         // You can deserialize (and thus freeze) the entire configuration as
         s.try_deserialize()
     }

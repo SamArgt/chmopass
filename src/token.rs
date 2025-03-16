@@ -76,17 +76,7 @@ pub fn generate_token(
     // Encode the token
     let token = encode(&header, &claims, &EncodingKey::from_rsa_pem(&private_key)?)?;
     debug!("Generated token: {:?} from claims {:?}", token, claims);
-
-    // validate token
-    let validated = validate_token(&token, "public.pem");
-    if validated.is_err() {
-        error!("Failed to validate token: {:?}", validated.err());
-    } else {
-        debug!("Token validated: {:?}", validated.unwrap());
-    }
-
-
-    
+   
     Ok(TokenResponse {
         token,
         expires_in: expiration_seconds,
