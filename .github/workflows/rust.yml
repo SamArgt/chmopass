@@ -22,8 +22,6 @@ jobs:
       with:
         path: '**/target'
         key: ${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-    - name: Install cross-rs
-      run: cargo install cross --git https://github.com/cross-rs/cross
     - name: Build chmopass
       run: cargo build --release
     - name: Upload chmopass artifact
