@@ -10,12 +10,14 @@ use crate::token::validate_token;
 #[derive(Clone)]
 pub struct ChmoPassMiddleWare {
     public_pem_filename: String,
+    disable: bool,
 }
 
 impl ChmoPassMiddleWare {
-    pub fn new(public_pem_filename: String) -> Self {
+    pub fn new(public_pem_filename: String, disable: Option<bool>) -> Self {
         ChmoPassMiddleWare {
-            public_pem_filename,
+            public_pem_filename: public_pem_filename,
+            disable: disable.unwrap_or(false),
         }
     }
 }
@@ -36,7 +38,8 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(InnerChmoPassMiddleWare { 
             service: Rc::new(service),
-            public_pem_filename: Rc::new(self.public_pem_filename.clone())
+            public_pem_filename: Rc::new(self.public_pem_filename.clone()),
+            disable: self.disable,
          }))
     }
 }
@@ -45,6 +48,7 @@ where
 pub struct InnerChmoPassMiddleWare<S> {
     service: Rc<S>,
     public_pem_filename: Rc<String>,
+    disable: bool,
 }
 
 impl<S, B> Service<ServiceRequest> for InnerChmoPassMiddleWare<S>
@@ -62,6 +66,12 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = Rc::clone(&self.service);
         let public_pem = self.public_pem_filename.clone().to_string();
+        if self.disable {
+            return Box::pin(async move {
+                let res = service.call(req).await?;
+                Ok(res)
+            });
+        }
         Box::pin(async move {
             let token = req.headers()
                 .get("Authorization")

@@ -6,7 +6,8 @@ use crate::creds::ServiceCredentials;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Auth {
-    pub pem_file: String
+    pub pem_file: String,
+    pub disable: bool
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

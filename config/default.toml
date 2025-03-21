@@ -14,3 +14,4 @@ client_secret = "chmopass-secret"
 
 [auth]
 pem_file = "public.pem"
+disable = false

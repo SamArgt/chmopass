@@ -153,7 +153,8 @@ async fn main() -> std::io::Result<()> {
     let server_port = app_state.clone().config.server.port;
     HttpServer::new(move || {
         let pem_file = app_state.config.auth.pem_file.clone();
-        let _auth = ChmoPassMiddleWare::new(pem_file);
+        let disable_auth = app_state.config.auth.disable;
+        let _auth = ChmoPassMiddleWare::new(pem_file, Some(disable_auth));
         // In development mode, we allow all origins
         let mut _cors = Cors::default();
         if app_state.config.server.run_mode == "development" {
